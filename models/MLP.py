@@ -1,23 +1,16 @@
 import numpy as np
-from data.input_data import load_MNIST
+from training_plots.dynamic_plotter import DynamicPlotter
+import os
+
+import sys
+sys.path.append('../')
 import utils.model_utils as utils
+from data.input_data import load_MNIST
+
 
 """
 Train a Multilayer neural network on MNIST
 """
-
-# Load the data
-data = load_MNIST('mnistData')
-print(data.keys())
-
-# Set global parameters
-eta = 1e-1 # learning rate
-epochs = 30
-numSamples = 50000 # number of samples in MNIST test set
-batchSize = 100
-
-epochInterval = int(numSamples / batchSize) 
-numTrials = epochs * epochInterval
 
 
 def MLP(numInputUnits, numHiddenUnits, numOutputUnits):
@@ -26,6 +19,8 @@ def MLP(numInputUnits, numHiddenUnits, numOutputUnits):
 	weightsTwo = np.random.randn(numHiddenUnits, numOutputUnits)  # second layer weights
 	biasOne = np.random.randn(numHiddenUnits, batchSize) # first layer bias
 	biasTwo = np.random.randn(numOutputUnits, batchSize)  # second layer bias
+
+	DP = DynamicPlotter(epochs)
 
 	for i in range(numTrials):
 		# initialize data and teachers from batch
@@ -63,16 +58,32 @@ def MLP(numInputUnits, numHiddenUnits, numOutputUnits):
 		if (i+1) % (epochInterval) == 0:
 			train_acc = (1/batchSize) * utils.Accuracy(z, teacher)
 			error = (1/batchSize) * utils.crossEntropy(z, teacher) 
-
 			print("Epoch %s: Training accuracy: %s; Error: %s"%((i+1)/epochInterval,train_acc,error))
+			DP.update_plot((i+1)/epochInterval, error, train_acc)
 
+		if (i+1) % (10*epochInterval) == 0:
 			# save weights
-			np.savetxt('weights_bias/mlp/w1_' + str((i+1)/(epochInterval)), weightsOne)
-			np.savetxt('weights_bias/mlp/w2_' + str((i+1)/(epochInterval)), weightsTwo)
-			np.savetxt('weights_bias/mlp/b1_' + str((i+1)/(epochInterval)), biasOne)
-			np.savetxt('weights_bias/mlp/b2_' + str((i+1)/(epochInterval)), biasTwo)
+			if not os.path.exists(weights_bias_dir):
+				os.makedirs(weights_bias_dir)
+
+			weights_bias = {'weightsOne': weightsOne, 'weightsTwo': weightsTwo, 'biasOne': biasOne, 'biasTwo':biasTwo, 'model_type': 'MLP'}
+			np.save(weights_bias_dir + '/epoch_' + str((i+1)/(epochInterval)), weights_bias)
 
 if __name__ == '__main__':
+	# Load the data
+	data = load_MNIST('mnistData')
+
+	# Set global parameters
+	eta = 1e-1 # learning rate
+	epochs = 30
+	numSamples = 50000 # number of samples in MNIST test set
+	batchSize = 100
+
+	epochInterval = int(numSamples / batchSize) 
+	numTrials = epochs * epochInterval
+
+	# Results directories
+	weights_bias_dir = '../results/weights_bias/mlp'
 	MLP(784,400,10)
 
 

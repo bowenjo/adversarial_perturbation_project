@@ -1,34 +1,17 @@
 import numpy as np
-from data.input_data import load_MNIST
-import utils.helperFunctions as hf
+import os
+
+import sys
+sys.path.append('../')
+from models.training_plots.dynamic_plotter import DynamicPlotter
 import utils.model_utils as utils
+import utils.helperFunctions as hf
+from data.input_data import load_MNIST
+
 
 """
 Train a directed-LCA (with feedback) classifier on MNIST 
 """
-
-# Load the data
-data = load_MNIST('mnistData')
-
-# load pre-trained sparse dictionary phi
-phi = np.load('lca_mnist_phi.npz')["weights"]
-phi = phi.T 
-
-
-# Set global parameters
-eta = 1e-1 # learning rate
-epochs = 30
-numSamples = 50000 # number of samples in MNIST test set
-batchSize = 100
-
-epochInterval = int(numSamples / batchSize) 
-numTrials = epochs * epochInterval
-
-# D-LCA specific parameters
-tau = 50  # proportionality constant in LCA sparse coefficient learning rule
-numSteps = 20  # Number of iterations to run LCA
-sparsityTradeoff = 0.142857142857  # Lambda parameter that determines how sparse the model will be
-feedbackRate = .6
 
 def feedbackEntropy(z):
     return (z * np.sum(z * (1 + np.log(z+np.finfo(float).eps)), axis=0)) - (z * (1 + np.log(z+np.finfo(float).eps)))
@@ -73,6 +56,8 @@ def DLCA_Classifier(numHiddenUnits, numOutputUnits):
     weights = np.random.randn(numHiddenUnits,numOutputUnits)
     bias = np.random.randn(numOutputUnits,batchSize)
 
+    DP = DynamicPlotter(epochs)
+
     for i in range(numTrials):
         # initialize data batch and teacher
         batch = data["train"].next_batch(batchSize)
@@ -99,9 +84,45 @@ def DLCA_Classifier(numHiddenUnits, numOutputUnits):
             error = (1/batchSize) * utils.crossEntropy(z, teacher)
             print("Epoch %s: Training accuracy: %s; Error: %s"%((i+1)/epochInterval,train_acc,error))
 
-            # save weights
-            np.savetxt('weights_bias/dlca/w_' + str((i+1)/(epochInterval)), weights)
-            np.savetxt('weights_bias/dlca/b_' + str((i+1)/(epochInterval)), bias)
+            DP.update_plot((i+1)/epochInterval, error, train_acc)
+
+        if (i+1) % (10*epochInterval) == 0:
+            # save results
+            if not os.path.exists(weights_bias_dir):
+                os.makedirs(weights_bias_dir)
+
+            weights_bias = {'weights': weights, 'bias': bias, 'phi': phi, 'tau': tau, "sparsityTradeoff": sparsityTradeoff, "numSteps": numSteps,
+                            'feedbackRate': feedbackRate, 'model_type': 'DLCA'}
+
+            np.save(weights_bias_dir + '/epoch' + str((i+1)/(epochInterval)), weights_bias)
+            
 
 if __name__ == '__main__':
+    # Load the data
+    data = load_MNIST('mnistData')
+
+    # load pre-trained sparse dictionary phi
+    phi = np.load('lca_mnist_phi.npz')["weights"]
+    phi = phi.T 
+
+
+    # Set global parameters
+    eta = 1e-1 # learning rate
+    epochs = 30
+    numSamples = 50000 # number of samples in MNIST test set
+    batchSize = 100
+
+    epochInterval = int(numSamples / batchSize) 
+    numTrials = epochs * epochInterval
+
+    # D-LCA specific parameters
+    tau = 50  # proportionality constant in LCA sparse coefficient learning rule
+    numSteps = 20  # Number of iterations to run LCA
+    sparsityTradeoff = 0.142857142857  # Lambda parameter that determines how sparse the model will be
+    feedbackRate = .6
+
+    # Results Directories
+    weights_bias_dir = '../results/weights_bias/dlca'
+
     DLCA_Classifier(400, 10)
+
